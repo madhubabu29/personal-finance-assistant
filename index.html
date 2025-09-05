@@ -198,14 +198,41 @@
       if (/bank|transfer/.test(d)) return "Bank Transfer";
       return "Other";
     }
-    function guessAmount(row) {
-      for (const key of Object.keys(row)) {
-        if (key.toLowerCase().includes('amount')) return parseFloat(row[key].replace(/[^-\d.]/g, '') || 0);
-        if (key.toLowerCase().includes('debit')) return -Math.abs(parseFloat(row[key].replace(/[^-\d.]/g, '') || 0));
-        if (key.toLowerCase().includes('credit')) return Math.abs(parseFloat(row[key].replace(/[^-\d.]/g, '') || 0));
-      }
-      return 0;
+function guessAmount(row) {
+  // Get the raw amount string
+  let amountValue = null;
+  for (const key of Object.keys(row)) {
+    if (key.toLowerCase().includes('amount')) {
+      amountValue = row[key];
+      break;
     }
+  }
+  if (!amountValue) return 0;
+
+  let amtStr = (amountValue + '').replace(/[\$,]/g, '').trim();
+
+  // If in parentheses, it's negative
+  if (/^\(\s*[\d\.]+\s*\)$/.test(amtStr)) {
+    amtStr = '-' + amtStr.replace(/[()\s]/g, '');
+  }
+  // If in parentheses with cents, e.g. ($200.00)
+  if (amtStr.startsWith('(') && amtStr.endsWith(')')) {
+    amtStr = '-' + amtStr.substring(1, amtStr.length - 1);
+  }
+
+  // Remove any stray spaces again
+  amtStr = amtStr.replace(/\s/g, '');
+
+  let amt = parseFloat(amtStr);
+  if (isNaN(amt)) amt = 0;
+
+  // Additional: If you have a column like "Master Category" and it's "Payments" or "Credits", invert sign
+  if (row['Master Category'] && /payment|credit|refund/i.test(row['Master Category'])) {
+    amt = -Math.abs(amt);
+  }
+
+  return amt;
+}
     function getDate(row) {
       for (const key of Object.keys(row)) {
         if (key.toLowerCase().includes('date')) return row[key];
