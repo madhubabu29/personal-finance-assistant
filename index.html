@@ -59,4 +59,207 @@
       if (/utility|electric|water|gas|internet|phone|cable/.test(desc)) return "Utilities";
       if (/insurance/.test(desc)) return "Insurance";
       if (/salary|payroll|paycheck|income|deposit/.test(desc)) return "Income";
-      if (/medical|health|doctor
+      if (/medical|health|doctor|hospital|pharmacy/.test(desc)) return "Medical";
+      if (/atm|cash/.test(desc)) return "Cash";
+      if (/bank|transfer/.test(desc)) return "Bank Transfer";
+      return "Other";
+    }
+    function guessAmount(row) {
+      for (const key of Object.keys(row)) {
+        if (key.toLowerCase().includes('amount')) return parseFloat(row[key].replace(/[^-\d.]/g, '') || 0);
+        if (key.toLowerCase().includes('debit')) return -Math.abs(parseFloat(row[key].replace(/[^-\d.]/g, '') || 0));
+        if (key.toLowerCase().includes('credit')) return Math.abs(parseFloat(row[key].replace(/[^-\d.]/g, '') || 0));
+      }
+      return 0;
+    }
+    function getDate(row) {
+      for (const key of Object.keys(row)) {
+        if (key.toLowerCase().includes('date')) return row[key];
+      }
+      return '';
+    }
+    function getDesc(row) {
+      for (const key of Object.keys(row)) {
+        if (key.toLowerCase().includes('desc') || key.toLowerCase().includes('payee') || key.toLowerCase().includes('merchant')) return row[key];
+      }
+      return '';
+    }
+    // --- Main Processing ---
+    let originalRows = [];
+    let mergedRows = [];
+    let categoryChart, trendChart;
+    let allCategories = new Set(), allPayees = new Set();
+
+    function processAndRender(rows) {
+      // Remove duplicates by Date+Description+Amount
+      const seen = new Set();
+      mergedRows = [];
+      allCategories.clear();
+      allPayees.clear();
+      for (const row of rows) {
+        const amount = guessAmount(row);
+        const date = getDate(row) || '';
+        const desc = getDesc(row) || '';
+        const category = categorize(desc);
+        const key = [date, desc, amount].join('|');
+        if (!seen.has(key)) {
+          seen.add(key);
+          mergedRows.push({...row, _amount: amount, _date: date, _desc: desc, _category: category});
+          if (category !== "Income") allCategories.add(category);
+          if (desc) allPayees.add(desc);
+        }
+      }
+      renderFilters();
+      renderEverything();
+    }
+
+    function filterRows() {
+      const cat = document.getElementById('categoryFilter').value;
+      const payee = document.getElementById('payeeFilter').value;
+      const start = document.getElementById('startDate').value;
+      const end = document.getElementById('endDate').value;
+      return mergedRows.filter(row => {
+        let ok = true;
+        if (cat && cat !== "All" && row._category !== cat) ok = false;
+        if (payee && payee !== "All" && row._desc !== payee) ok = false;
+        if (start) {
+          let d = new Date(row._date);
+          let ds = new Date(start);
+          if (!isNaN(d.getTime()) && d < ds) ok = false;
+        }
+        if (end) {
+          let d = new Date(row._date);
+          let de = new Date(end);
+          if (!isNaN(d.getTime()) && d > de) ok = false;
+        }
+        return ok;
+      });
+    }
+
+    function renderFilters() {
+      // Show filters UI
+      document.getElementById('filters').style.display = "flex";
+      // Category dropdown
+      const catSel = document.getElementById('categoryFilter');
+      catSel.innerHTML = '<option>All</option>' + Array.from(allCategories).sort().map(c => `<option>${c}</option>`).join('');
+      // Payee dropdown
+      const payeeSel = document.getElementById('payeeFilter');
+      payeeSel.innerHTML = '<option>All</option>' + Array.from(allPayees).sort().map(p => `<option>${p}</option>`).join('');
+      // Reset date pickers
+      document.getElementById('startDate').value = "";
+      document.getElementById('endDate').value = "";
+    }
+
+    function renderEverything() {
+      const rows = filterRows();
+      // Summary
+      let income = 0, expense = 0;
+      for (const row of rows) {
+        const amt = row._amount;
+        if (amt > 0) income += amt;
+        else if (amt < 0) expense += amt;
+      }
+      document.getElementById('summary').innerHTML = `
+        <span><b>Total Income:</b> $${income.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+        <span><b>Total Expenses:</b> $${Math.abs(expense).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+        <span><b>Net Cash Flow:</b> $${(income + expense).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
+      `;
+      // Charts
+      // Pie - Category
+      const categoryTotals = {};
+      const monthlyTotals = {};
+      rows.forEach(row => {
+        const amt = row._amount;
+        if (amt < 0) {
+          // Pie: by category
+          categoryTotals[row._category] = (categoryTotals[row._category] || 0) + Math.abs(amt);
+          // Line: by month (YYYY-MM)
+          let d = new Date(row._date);
+          let month;
+          if (!isNaN(d.getTime())) {
+            month = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}`;
+          } else {
+            month = (row._date || '').substring(0,7);
+          }
+          monthlyTotals[month] = (monthlyTotals[month] || 0) + Math.abs(amt);
+        }
+      });
+      const catLabels = Object.keys(categoryTotals);
+      const catData = Object.values(categoryTotals);
+      if (categoryChart) categoryChart.destroy();
+      categoryChart = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+        type: 'pie',
+        data: {
+          labels: catLabels,
+          datasets: [{ data: catData, backgroundColor: [
+            "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc949","#af7aa1","#ff9da7","#9c755f","#bab0ab"
+          ]}]
+        },
+        options: { plugins: { legend: { position: 'right' } } }
+      });
+      // Line - Monthly trend
+      const sortedMonths = Object.keys(monthlyTotals).sort();
+      const trendData = sortedMonths.map(m => monthlyTotals[m]);
+      if (trendChart) trendChart.destroy();
+      trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: sortedMonths,
+          datasets: [{
+            label: 'Expenses',
+            data: trendData,
+            fill: false,
+            borderColor: '#e15759',
+            backgroundColor: '#e15759',
+            tension: 0.2
+          }]
+        },
+        options: { scales: { y: { beginAtZero: true } } }
+      });
+      // Table
+      const headers = Object.keys(rows[0] || {}).slice(0, 20);
+      let output = '<table><thead><tr>';
+      for (const header of headers) output += `<th>${header}</th>`;
+      output += '</tr></thead><tbody>';
+      for (const row of rows) {
+        output += '<tr>';
+        for (const header of headers) output += `<td>${row[header] || ''}</td>`;
+        output += '</tr>';
+      }
+      output += '</tbody></table>';
+      document.getElementById('csv-table').innerHTML = output;
+    }
+
+    // --- File Upload & Event Listeners ---
+    document.getElementById('csvFiles').addEventListener('change', function(event) {
+      const files = event.target.files;
+      if (!files.length) return;
+      let allRows = [];
+      let fileCount = 0;
+      let filesToParse = files.length;
+      for (let i = 0; i < files.length; i++) {
+        Papa.parse(files[i], {
+          header: true,
+          skipEmptyLines: true,
+          complete: function(results) {
+            allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
+            fileCount++;
+            if (fileCount === filesToParse) {
+              originalRows = allRows;
+              processAndRender(originalRows);
+            }
+          }
+        });
+      }
+    });
+
+    // Filter change events
+    document.getElementById('filters').addEventListener('change', renderEverything);
+    document.getElementById('resetFilters').addEventListener('click', function() {
+      renderFilters();
+      renderEverything();
+    });
+
+  </script>
+</body>
+</html>
