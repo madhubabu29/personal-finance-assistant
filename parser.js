@@ -1,6 +1,5 @@
 // parser.js
 export function guessAmount(row) {
-  // Find the right column
   let amountValue = null;
   for (const key of Object.keys(row)) {
     if (key.toLowerCase().includes('amount')) {
@@ -11,7 +10,6 @@ export function guessAmount(row) {
   if (!amountValue) return 0;
   let amtStr = (amountValue + '').replace(/[\$,]/g, '').trim();
 
-  // Parentheses = negative
   if (/^\(\s*[\d\.,]+\s*\)$/.test(amtStr)) {
     amtStr = '-' + amtStr.replace(/[()\s]/g, '');
   }
@@ -23,7 +21,6 @@ export function guessAmount(row) {
   let amt = parseFloat(amtStr);
   if (isNaN(amt)) amt = 0;
 
-  // Payments/credits/refunds in 'Master Category'
   if (row['Master Category'] && /payment|credit|refund/i.test(row['Master Category'])) {
     amt = -Math.abs(amt);
   }
@@ -50,11 +47,12 @@ export function categorize(desc) {
   if (map[desc]) return map[desc];
 
   const d = desc.toLowerCase();
+  if (/grocery|groceries|costco|kroger|tom thumb|supermarket/.test(d)) return "Grocery";
   if (/starbucks|coffee|cafe|restaurant|food|eat|drink|dining/.test(d)) return "Food & Drink";
   if (/amazon|shopping|store|mall|target|walmart/.test(d)) return "Shopping";
+  if (/maintenance|repair|home depot|lowe's|filter|window clean|pest control|lawn|garden/.test(d)) return "Home Maintenance";
   if (/uber|lyft|taxi|transport|bus|train|transit|metro|flight|airlines|airline/.test(d)) return "Transport";
   if (/netflix|hulu|prime|entertainment|movie|cinema|spotify/.test(d)) return "Entertainment";
-  if (/rent|lease|apartment|housing/.test(d)) return "Rent";
   if (/utility|electric|water|gas|internet|phone|cable/.test(d)) return "Utilities";
   if (/insurance/.test(d)) return "Insurance";
   if (/salary|payroll|paycheck|income|deposit/.test(d)) return "Income";
