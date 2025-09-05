@@ -54,3 +54,23 @@ export function renderTable(rows, allCategories, updateCategoryCallback) {
     });
   });
 }
+export function renderRecurringTable(rows) {
+  if (!rows.length) {
+    document.getElementById('recurring-table').innerHTML = '';
+    return;
+  }
+  const headers = Object.keys(rows[0] || {}).slice(0, 20);
+  let output = '<h3>Recurring Transactions</h3>';
+  output += '<table><thead><tr>';
+  for (const header of headers) output += `<th>${header}</th>`;
+  output += '<th>Category</th></tr></thead><tbody>';
+  for (const row of rows) {
+    output += '<tr>';
+    for (const header of headers) output += `<td>${row[header] || ''}</td>`;
+    output += `<td>${row._category || ''}</td>`;
+    output += '</tr>';
+  }
+  output += '</tbody></table>';
+  document.getElementById('recurring-table').innerHTML = output;
+}
+
