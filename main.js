@@ -1,127 +1,42 @@
-// main.js
-import { guessAmount, getDate, getDesc, categorize } from './parser.js';
-import { getCustomCategoryMap } from './storage.js';
-import { drawCategoryPie, drawTrendChart } from './charts.js';
-import { renderFilters, renderSummary, renderTable, renderRecurringTable, renderRecommendations, DEFAULT_CATEGORIES } from './ui.js';
-import { findRecurringTransactions } from './recurring.js';
-import { generateRecommendations } from './recommendations.js';
-
-let originalRows = [], mergedRows = [], allCategories = new Set(), allPayees = new Set();
-
-function processAndRender(rows) {
-  const seen = new Set();
-  mergedRows = [];
-  allCategories.clear();
-  allPayees.clear();
-  for (const row of rows) {
-    const amount = guessAmount(row);
-    const date = getDate(row) || '';
-    const desc = getDesc(row) || '';
-    const category = categorize(desc);
-    const key = [date, desc, amount].join('|');
-    if (!seen.has(key)) {
-      seen.add(key);
-      mergedRows.push({...row, _amount: amount, _date: date, _desc: desc, _category: category});
-      if (category !== "Income") allCategories.add(category);
-      if (desc) allPayees.add(desc);
-    }
-  }
-  renderFilters(allCategories, allPayees);
-  renderEverything();
-}
-
-function filterRows() {
-  const cat = document.getElementById('categoryFilter').value;
-  const payee = document.getElementById('payeeFilter').value;
-  const start = document.getElementById('startDate').value;
-  const end = document.getElementById('endDate').value;
-  return mergedRows.filter(row => {
-    let ok = true;
-    if (cat && cat !== "All" && row._category !== cat) ok = false;
-    if (payee && payee !== "All" && row._desc !== payee) ok = false;
-    if (start) {
-      let d = new Date(row._date);
-      let ds = new Date(start);
-      if (!isNaN(d.getTime()) && d < ds) ok = false;
-    }
-    if (end) {
-      let d = new Date(row._date);
-      let de = new Date(end);
-      if (!isNaN(d.getTime()) && d > de) ok = false;
-    }
-    return ok;
-  });
-}
-
-function renderEverything() {
-  const rows = filterRows();
-  let income = 0, expense = 0;
-  for (const row of rows) {
-    const amt = row._amount;
-    if (amt > 0) income += amt;
-    else if (amt < 0) expense += amt;
-  }
-  renderSummary(income, expense, income + expense);
-
-  const categoryTotals = {}, monthlyTotals = {};
-  rows.forEach(row => {
-    const amt = row._amount;
-    if (amt < 0) {
-      categoryTotals[row._category] = (categoryTotals[row._category] || 0) + Math.abs(amt);
-      let d = new Date(row._date);
-      let month = !isNaN(d.getTime()) ? `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}` : (row._date||'').substring(0,7);
-      monthlyTotals[month] = (monthlyTotals[month] || 0) + Math.abs(amt);
-    }
-  });
-  const catLabels = Object.keys(categoryTotals);
-  const catData = Object.values(categoryTotals);
-  drawCategoryPie(document.getElementById('categoryChart').getContext('2d'), catLabels, catData);
-
-  const sortedMonths = Object.keys(monthlyTotals).sort();
-  const trendData = sortedMonths.map(m => monthlyTotals[m]);
-  drawTrendChart(document.getElementById('trendChart').getContext('2d'), sortedMonths, trendData);
-
-  // Recommendations
-  const recommendations = generateRecommendations(rows);
-  renderRecommendations(recommendations);
-
-  // Recurring
-  const recurringRows = findRecurringTransactions(rows);
-  renderRecurringTable(recurringRows);
-
-  // Table with editable category
-  renderTable(rows, allCategories, (desc, newCat) => {
-    mergedRows.forEach(r => { if (r._desc === desc) r._category = newCat; });
-    allCategories.add(newCat);
-    renderFilters(allCategories, allPayees);
-    renderEverything();
-  });
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('csvFiles').addEventListener('change', function(event) {
-    const files = event.target.files;
-    if (!files.length) return;
-    let allRows = [], fileCount = 0, filesToParse = files.length;
-    for (let i = 0; i < files.length; i++) {
-      Papa.parse(files[i], {
-        header: true,
-        skipEmptyLines: true,
-        complete: function(results) {
-          allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
-          fileCount++;
-          if (fileCount === filesToParse) {
-            originalRows = allRows;
-            processAndRender(originalRows);
-          }
-        }
-      });
-    }
-  });
-
-  document.getElementById('filters').addEventListener('change', renderEverything);
-  document.getElementById('resetFilters').addEventListener('click', function() {
-    renderFilters(allCategories, allPayees);
-    renderEverything();
-  });
-});
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Personal Finance Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <h1>Personal Finance Assistant</h1>
+  <p style="margin-bottom: 0.8em;">Upload your bank or credit card CSV statements below.</p>
+  <input type="file" id="csvFiles" multiple accept=".csv" />
+  <div class="filters" id="filters" style="display:none;">
+    <label for="categoryFilter">Category:</label>
+    <select id="categoryFilter"></select>
+    <label for="payeeFilter">Payee:</label>
+    <select id="payeeFilter"></select>
+    <label for="startDate">From:</label>
+    <input type="date" id="startDate" />
+    <label for="endDate">To:</label>
+    <input type="date" id="endDate" />
+    <button id="resetFilters" style="margin-left:1em;">Reset</button>
+  </div>
+  <div class="summary" id="summary"></div>
+  <div id="recommendations"></div>
+  <div class="charts">
+    <div class="chart-container">
+      <h3 style="font-size:1.07em;">Expenses by Category</h3>
+      <canvas id="categoryChart" width="350" height="350"></canvas>
+    </div>
+    <div class="chart-container">
+      <h3 style="font-size:1.07em;">Monthly Expense Trend</h3>
+      <canvas id="trendChart" width="420" height="350"></canvas>
+    </div>
+  </div>
+  <div id="recurring-table"></div>
+  <div id="csv-table"></div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
