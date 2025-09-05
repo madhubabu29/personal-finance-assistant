@@ -3,7 +3,7 @@ import { getCustomCategoryMap, setCategoryForDesc } from './storage.js';
 import { categorize } from './parser.js';
 
 export const DEFAULT_CATEGORIES = [
-  "Food & Drink", "Shopping", "Transport", "Entertainment", "Rent", "Utilities",
+  "Grocery", "Food & Drink", "Shopping", "Home Maintenance", "Transport", "Entertainment", "Utilities",
   "Insurance", "Income", "Medical", "Cash", "Bank Transfer", "Other"
 ];
 
@@ -43,7 +43,6 @@ export function renderTable(rows, allCategories, updateCategoryCallback) {
   }
   output += '</tbody></table>';
   document.getElementById('csv-table').innerHTML = output;
-  // Event listeners
   document.querySelectorAll('.cat-edit-select').forEach(sel => {
     sel.addEventListener('change', function() {
       const idx = parseInt(sel.getAttribute('data-rowidx'));
@@ -54,6 +53,7 @@ export function renderTable(rows, allCategories, updateCategoryCallback) {
     });
   });
 }
+
 export function renderRecurringTable(rows) {
   if (!rows.length) {
     document.getElementById('recurring-table').innerHTML = '';
@@ -74,3 +74,13 @@ export function renderRecurringTable(rows) {
   document.getElementById('recurring-table').innerHTML = output;
 }
 
+export function renderRecommendations(recommendations) {
+  const div = document.getElementById('recommendations');
+  if (!div) return;
+  div.innerHTML = `
+    <h3>Spending Recommendations</h3>
+    <ul>
+      ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+    </ul>
+  `;
+}
