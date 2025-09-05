@@ -18,6 +18,7 @@
     .filters { margin: 1.5em 0 1.5em 0; padding: 1em; background: #f7f7f7; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 1em; align-items: center; }
     .filters label { font-weight: bold; margin-right: 0.5em; }
     .filters select, .filters input[type="date"] { padding: 2px 8px; }
+    .cat-edit-select { min-width: 120px; }
   </style>
 </head>
 <body>
@@ -48,20 +49,46 @@
   </div>
   <div id="csv-table"></div>
   <script>
-    // --- Utilities ---
+    // --- Category mapping and utilities ---
+    const DEFAULT_CATEGORIES = [
+      "Food & Drink", "Shopping", "Transport", "Entertainment", "Rent", "Utilities",
+      "Insurance", "Income", "Medical", "Cash", "Bank Transfer", "Other"
+    ];
+    function getCustomCategoryMap() {
+      try {
+        return JSON.parse(localStorage.getItem('customCategoryMap') || '{}');
+      } catch { return {}; }
+    }
+    function setCustomCategoryMap(map) {
+      localStorage.setItem('customCategoryMap', JSON.stringify(map));
+    }
+    function getCategoryForDesc(desc) {
+      const map = getCustomCategoryMap();
+      return map[desc] || null;
+    }
+    function setCategoryForDesc(desc, category) {
+      const map = getCustomCategoryMap();
+      map[desc] = category;
+      setCustomCategoryMap(map);
+    }
     function categorize(desc) {
-      desc = (desc || "").toLowerCase();
-      if (/starbucks|coffee|cafe|restaurant|food|eat|drink|dining/.test(desc)) return "Food & Drink";
-      if (/amazon|shopping|store|mall|target|walmart/.test(desc)) return "Shopping";
-      if (/uber|lyft|taxi|transport|bus|train|transit|metro|flight|airlines|airline/.test(desc)) return "Transport";
-      if (/netflix|hulu|prime|entertainment|movie|cinema|spotify/.test(desc)) return "Entertainment";
-      if (/rent|lease|apartment|housing/.test(desc)) return "Rent";
-      if (/utility|electric|water|gas|internet|phone|cable/.test(desc)) return "Utilities";
-      if (/insurance/.test(desc)) return "Insurance";
-      if (/salary|payroll|paycheck|income|deposit/.test(desc)) return "Income";
-      if (/medical|health|doctor|hospital|pharmacy/.test(desc)) return "Medical";
-      if (/atm|cash/.test(desc)) return "Cash";
-      if (/bank|transfer/.test(desc)) return "Bank Transfer";
+      // Use custom category if available
+      if (!desc) return "Other";
+      const custom = getCategoryForDesc(desc);
+      if (custom) return custom;
+      // Default keyword rules
+      const d = desc.toLowerCase();
+      if (/starbucks|coffee|cafe|restaurant|food|eat|drink|dining/.test(d)) return "Food & Drink";
+      if (/amazon|shopping|store|mall|target|walmart/.test(d)) return "Shopping";
+      if (/uber|lyft|taxi|transport|bus|train|transit|metro|flight|airlines|airline/.test(d)) return "Transport";
+      if (/netflix|hulu|prime|entertainment|movie|cinema|spotify/.test(d)) return "Entertainment";
+      if (/rent|lease|apartment|housing/.test(d)) return "Rent";
+      if (/utility|electric|water|gas|internet|phone|cable/.test(d)) return "Utilities";
+      if (/insurance/.test(d)) return "Insurance";
+      if (/salary|payroll|paycheck|income|deposit/.test(d)) return "Income";
+      if (/medical|health|doctor|hospital|pharmacy/.test(d)) return "Medical";
+      if (/atm|cash/.test(d)) return "Cash";
+      if (/bank|transfer/.test(d)) return "Bank Transfer";
       return "Other";
     }
     function guessAmount(row) {
@@ -137,7 +164,6 @@
     }
 
     function renderFilters() {
-      // Show filters UI
       document.getElementById('filters').style.display = "flex";
       // Category dropdown
       const catSel = document.getElementById('categoryFilter');
@@ -216,18 +242,43 @@
         },
         options: { scales: { y: { beginAtZero: true } } }
       });
-      // Table
+      // Table with editable category
       const headers = Object.keys(rows[0] || {}).slice(0, 20);
       let output = '<table><thead><tr>';
       for (const header of headers) output += `<th>${header}</th>`;
-      output += '</tr></thead><tbody>';
-      for (const row of rows) {
+      output += '<th>Category (Edit)</th></tr></thead><tbody>';
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         output += '<tr>';
         for (const header of headers) output += `<td>${row[header] || ''}</td>`;
+        // Category select
+        output += `<td>
+          <select data-rowidx="${i}" class="cat-edit-select">
+            ${DEFAULT_CATEGORIES.map(cat => `<option value="${cat}"${row._category === cat ? " selected" : ""}>${cat}</option>`).join('')}
+          </select>
+        </td>`;
         output += '</tr>';
       }
       output += '</tbody></table>';
       document.getElementById('csv-table').innerHTML = output;
+      // Add event listeners to category dropdowns
+      document.querySelectorAll('.cat-edit-select').forEach(sel => {
+        sel.addEventListener('change', function(ev) {
+          const idx = parseInt(sel.getAttribute('data-rowidx'));
+          const newCat = sel.value;
+          const desc = rows[idx]._desc;
+          // Save to localStorage mapping
+          setCategoryForDesc(desc, newCat);
+          // Update all mergedRows with this desc
+          mergedRows.forEach(r => {
+            if (r._desc === desc) r._category = newCat;
+          });
+          // Update filters in case new category is introduced
+          allCategories.add(newCat);
+          renderFilters();
+          renderEverything();
+        });
+      });
     }
 
     // --- File Upload & Event Listeners ---
