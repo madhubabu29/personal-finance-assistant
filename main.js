@@ -3,6 +3,8 @@ import { guessAmount, getDate, getDesc, categorize } from './parser.js';
 import { getCustomCategoryMap } from './storage.js';
 import { drawCategoryPie, drawTrendChart } from './charts.js';
 import { renderFilters, renderSummary, renderTable, DEFAULT_CATEGORIES } from './ui.js';
+import { findRecurringTransactions } from './recurring.js';
+import { renderRecurringTable } from './ui.js';
 
 let originalRows = [], mergedRows = [], allCategories = new Set(), allPayees = new Set();
 
@@ -79,7 +81,10 @@ function renderEverything() {
   const sortedMonths = Object.keys(monthlyTotals).sort();
   const trendData = sortedMonths.map(m => monthlyTotals[m]);
   drawTrendChart(document.getElementById('trendChart').getContext('2d'), sortedMonths, trendData);
-
+  //added new for recurring
+  const recurringRows = findRecurringTransactions(rows);
+  renderRecurringTable(recurringRows);
+  
   // Table with editable category
   renderTable(rows, allCategories, (desc, newCat) => {
     mergedRows.forEach(r => { if (r._desc === desc) r._category = newCat; });
