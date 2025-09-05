@@ -15,12 +15,26 @@
     .summary span { display: inline-block; min-width: 180px; }
     .charts { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-end; margin-top: 2em; }
     .chart-container { min-width: 320px; }
+    .filters { margin: 1.5em 0 1.5em 0; padding: 1em; background: #f7f7f7; border-radius: 8px; display: flex; flex-wrap: wrap; gap: 1em; align-items: center; }
+    .filters label { font-weight: bold; margin-right: 0.5em; }
+    .filters select, .filters input[type="date"] { padding: 2px 8px; }
   </style>
 </head>
 <body>
   <h1>Personal Finance Assistant</h1>
   <p>Upload your bank or credit card CSV statements below.</p>
   <input type="file" id="csvFiles" multiple accept=".csv" />
+  <div class="filters" id="filters" style="display:none;">
+    <label for="categoryFilter">Category:</label>
+    <select id="categoryFilter"></select>
+    <label for="payeeFilter">Payee:</label>
+    <select id="payeeFilter"></select>
+    <label for="startDate">From:</label>
+    <input type="date" id="startDate" />
+    <label for="endDate">To:</label>
+    <input type="date" id="endDate" />
+    <button id="resetFilters" style="margin-left:1em;">Reset</button>
+  </div>
   <div class="summary" id="summary"></div>
   <div class="charts">
     <div class="chart-container">
@@ -34,7 +48,7 @@
   </div>
   <div id="csv-table"></div>
   <script>
-    // Simple categorization based on keywords
+    // --- Utilities ---
     function categorize(desc) {
       desc = (desc || "").toLowerCase();
       if (/starbucks|coffee|cafe|restaurant|food|eat|drink|dining/.test(desc)) return "Food & Drink";
@@ -45,144 +59,4 @@
       if (/utility|electric|water|gas|internet|phone|cable/.test(desc)) return "Utilities";
       if (/insurance/.test(desc)) return "Insurance";
       if (/salary|payroll|paycheck|income|deposit/.test(desc)) return "Income";
-      if (/medical|health|doctor|hospital|pharmacy/.test(desc)) return "Medical";
-      if (/atm|cash/.test(desc)) return "Cash";
-      if (/bank|transfer/.test(desc)) return "Bank Transfer";
-      return "Other";
-    }
-    function guessAmount(row) {
-      for (const key of Object.keys(row)) {
-        if (key.toLowerCase().includes('amount')) return parseFloat(row[key].replace(/[^-\d.]/g, '') || 0);
-        if (key.toLowerCase().includes('debit')) return -Math.abs(parseFloat(row[key].replace(/[^-\d.]/g, '') || 0));
-        if (key.toLowerCase().includes('credit')) return Math.abs(parseFloat(row[key].replace(/[^-\d.]/g, '') || 0));
-      }
-      return 0;
-    }
-    function getDate(row) {
-      for (const key of Object.keys(row)) {
-        if (key.toLowerCase().includes('date')) return row[key];
-      }
-      return '';
-    }
-    function getDesc(row) {
-      for (const key of Object.keys(row)) {
-        if (key.toLowerCase().includes('desc') || key.toLowerCase().includes('payee') || key.toLowerCase().includes('merchant')) return row[key];
-      }
-      return '';
-    }
-    let categoryChart, trendChart;
-    document.getElementById('csvFiles').addEventListener('change', function(event) {
-      const files = event.target.files;
-      if (!files.length) return;
-      let allRows = [];
-      let fileCount = 0;
-      let filesToParse = files.length;
-      let output = '';
-      for (let i = 0; i < files.length; i++) {
-        Papa.parse(files[i], {
-          header: true,
-          skipEmptyLines: true,
-          complete: function(results) {
-            allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
-            fileCount++;
-            if (fileCount === filesToParse) {
-              // Remove duplicates by Date+Description+Amount
-              const seen = new Set();
-              const mergedRows = [];
-              for (const row of allRows) {
-                const amount = guessAmount(row);
-                const date = getDate(row) || '';
-                const desc = getDesc(row) || '';
-                const key = [date, desc, amount].join('|');
-                if (!seen.has(key)) {
-                  seen.add(key);
-                  mergedRows.push({...row, _amount: amount, _date: date, _desc: desc, _category: categorize(desc)});
-                }
-              }
-              // Calculate summary
-              let income = 0, expense = 0;
-              for (const row of mergedRows) {
-                const amt = row._amount;
-                if (amt > 0) income += amt;
-                else if (amt < 0) expense += amt;
-              }
-              document.getElementById('summary').innerHTML = `
-                <span><b>Total Income:</b> $${income.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
-                <span><b>Total Expenses:</b> $${Math.abs(expense).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
-                <span><b>Net Cash Flow:</b> $${(income + expense).toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})}</span>
-              `;
-              // Prepare data for charts
-              const categoryTotals = {};
-              const monthlyTotals = {};
-              mergedRows.forEach(row => {
-                const amt = row._amount;
-                if (amt < 0) {
-                  // Pie: by category
-                  categoryTotals[row._category] = (categoryTotals[row._category] || 0) + Math.abs(amt);
-                  // Line: by month (YYYY-MM)
-                  let d = new Date(row._date);
-                  let month;
-                  if (!isNaN(d.getTime())) {
-                    month = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}`;
-                  } else {
-                    // fallback: try substring
-                    month = (row._date || '').substring(0,7);
-                  }
-                  monthlyTotals[month] = (monthlyTotals[month] || 0) + Math.abs(amt);
-                }
-              });
-              // Draw Category Pie Chart
-              const catLabels = Object.keys(categoryTotals);
-              const catData = Object.values(categoryTotals);
-              if (categoryChart) categoryChart.destroy();
-              categoryChart = new Chart(document.getElementById('categoryChart').getContext('2d'), {
-                type: 'pie',
-                data: {
-                  labels: catLabels,
-                  datasets: [{ data: catData, backgroundColor: [
-                    "#4e79a7","#f28e2b","#e15759","#76b7b2","#59a14f","#edc949","#af7aa1","#ff9da7","#9c755f","#bab0ab"
-                  ]}]
-                },
-                options: { plugins: { legend: { position: 'right' } } }
-              });
-              // Draw Monthly Trend Line Chart
-              const sortedMonths = Object.keys(monthlyTotals).sort();
-              const trendData = sortedMonths.map(m => monthlyTotals[m]);
-              if (trendChart) trendChart.destroy();
-              trendChart = new Chart(document.getElementById('trendChart').getContext('2d'), {
-                type: 'line',
-                data: {
-                  labels: sortedMonths,
-                  datasets: [{
-                    label: 'Expenses',
-                    data: trendData,
-                    fill: false,
-                    borderColor: '#e15759',
-                    backgroundColor: '#e15759',
-                    tension: 0.2
-                  }]
-                },
-                options: {
-                  scales: { y: { beginAtZero: true } }
-                }
-              });
-              // Show merged table (first 20 columns only)
-              const headers = Object.keys(mergedRows[0] || {}).slice(0, 20);
-              output = '<table><thead><tr>';
-              for (const header of headers) output += `<th>${header}</th>`;
-              output += '</tr></thead><tbody>';
-              for (const row of mergedRows) {
-                output += '<tr>';
-                for (const header of headers) output += `<td>${row[header] || ''}</td>`;
-                output += '</tr>';
-              }
-              output += '</tbody></table>';
-              document.getElementById('csv-table').innerHTML = output;
-            }
-          }
-        });
-      }
-    });
-  </script>
-</body>
-</html>
+      if (/medical|health|doctor
