@@ -49,12 +49,12 @@ export function categorize(desc) {
   const d = desc.toLowerCase();
   if (/grocery|groceries|costco|kroger|tom thumb|supermarket/.test(d)) return "Grocery";
   if (/starbucks|coffee|cafe|restaurant|food|eat|drink|dining/.test(d)) return "Food & Drink";
-  if (/amazon|shopping|store|mall|target|walmart/.test(d)) return "Shopping";
+  if (/amazon|nebraska furniture mart|shopping|store|ls shristi|mall|target|macy's|walmart/.test(d)) return "Shopping";
   if (/maintenance|repair|home depot|lowe's|filter|window clean|pest control|lawn|garden/.test(d)) return "Home Maintenance";
   if (/uber|lyft|taxi|transport|bus|train|transit|metro|flight|airlines|airline/.test(d)) return "Transport";
   if (/netflix|hulu|prime|entertainment|movie|cinema|spotify/.test(d)) return "Entertainment";
-  if (/utility|electric|water|gas|internet|phone|cable/.test(d)) return "Utilities";
-  if (/insurance/.test(d)) return "Insurance";
+  if (/utility|electric|simplisafe|muncipal online services|water|gas|internet|phone|cable/.test(d)) return "Utilities";
+  if (/insurance|state farm/.test(d)) return "Insurance";
   if (/salary|payroll|paycheck|income|deposit/.test(d)) return "Income";
   if (/medical|health|doctor|hospital|pharmacy/.test(d)) return "Medical";
   if (/atm|cash/.test(d)) return "Cash";
