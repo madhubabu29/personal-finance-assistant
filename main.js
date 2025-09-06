@@ -63,6 +63,7 @@ function renderEverything() {
   }
   renderSummary(income, expense, income + expense);
 
+  // Charts
   const categoryTotals = {}, monthlyTotals = {};
   rows.forEach(row => {
     const amt = row._amount;
@@ -75,7 +76,8 @@ function renderEverything() {
   });
   const catLabels = Object.keys(categoryTotals);
   const catData = Object.values(categoryTotals);
-  drawCategoryPie(document.getElementById('categoryChart').getContext('2d'), catLabels, catData);
+  const totalSpend = catData.reduce((a, b) => a + b, 0);
+  drawCategoryPie(document.getElementById('categoryChart').getContext('2d'), catLabels, catData, totalSpend);
 
   const sortedMonths = Object.keys(monthlyTotals).sort();
   const trendData = sortedMonths.map(m => monthlyTotals[m]);
