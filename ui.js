@@ -7,6 +7,8 @@ export const DEFAULT_CATEGORIES = [
   "Insurance", "Income", "Medical", "Cash", "Bank Transfer", "Other"
 ];
 
+let currentSort = { col: null, asc: true };
+
 export function renderFilters(categories, payees) {
   document.getElementById('filters').style.display = "flex";
   const catSel = document.getElementById('categoryFilter');
@@ -26,9 +28,22 @@ export function renderSummary(income, expense, net) {
 }
 
 export function renderTable(rows, allCategories, updateCategoryCallback) {
+  const tableDiv = document.getElementById('csv-table');
+  if (!rows.length) {
+    tableDiv.innerHTML = '<h3>All Transactions</h3><p>No transactions to display.</p>';
+    return;
+  }
   const headers = Object.keys(rows[0] || {}).slice(0, 20);
-  let output = '<table><thead><tr>';
-  for (const header of headers) output += `<th>${header}</th>`;
+  let output = '<h3>All Transactions</h3>';
+  output += '<table id="main-txn-table"><thead><tr>';
+  headers.forEach((header, idx) => {
+    // Add sort arrow if currently sorted
+    let arrow = '';
+    if (currentSort.col === header) {
+      arrow = currentSort.asc ? ' ▲' : ' ▼';
+    }
+    output += `<th data-col="${header}">${header}${arrow}</th>`;
+  });
   output += '<th>Category (Edit)</th></tr></thead><tbody>';
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
@@ -42,7 +57,9 @@ export function renderTable(rows, allCategories, updateCategoryCallback) {
     output += '</tr>';
   }
   output += '</tbody></table>';
-  document.getElementById('csv-table').innerHTML = output;
+  tableDiv.innerHTML = output;
+
+  // Category change event
   document.querySelectorAll('.cat-edit-select').forEach(sel => {
     sel.addEventListener('change', function() {
       const idx = parseInt(sel.getAttribute('data-rowidx'));
@@ -52,11 +69,40 @@ export function renderTable(rows, allCategories, updateCategoryCallback) {
       updateCategoryCallback(desc, newCat);
     });
   });
+
+  // Header sort events
+  tableDiv.querySelectorAll('th[data-col]').forEach((th, idx) => {
+    th.style.cursor = 'pointer';
+    th.onclick = () => {
+      const col = th.getAttribute('data-col');
+      sortTableByColumn(rows, col, headers, allCategories, updateCategoryCallback);
+    };
+  });
+}
+
+function sortTableByColumn(rows, col, headers, allCategories, updateCategoryCallback) {
+  if (currentSort.col === col) currentSort.asc = !currentSort.asc;
+  else { currentSort.col = col; currentSort.asc = true; }
+  rows.sort((a, b) => {
+    let av = a[col] || '';
+    let bv = b[col] || '';
+    // Numeric sort if possible
+    if (!isNaN(av) && !isNaN(bv)) {
+      av = parseFloat(av);
+      bv = parseFloat(bv);
+    }
+    if (av < bv) return currentSort.asc ? -1 : 1;
+    if (av > bv) return currentSort.asc ? 1 : -1;
+    return 0;
+  });
+  // Re-render table only
+  renderTable(rows, allCategories, updateCategoryCallback);
 }
 
 export function renderRecurringTable(rows) {
+  const recurringDiv = document.getElementById('recurring-table');
   if (!rows.length) {
-    document.getElementById('recurring-table').innerHTML = '';
+    recurringDiv.innerHTML = '';
     return;
   }
   const headers = Object.keys(rows[0] || {}).slice(0, 20);
@@ -71,7 +117,7 @@ export function renderRecurringTable(rows) {
     output += '</tr>';
   }
   output += '</tbody></table>';
-  document.getElementById('recurring-table').innerHTML = output;
+  recurringDiv.innerHTML = output;
 }
 
 export function renderRecommendations(recommendations) {
