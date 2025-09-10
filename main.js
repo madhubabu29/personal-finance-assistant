@@ -106,38 +106,20 @@ window.addEventListener('DOMContentLoaded', () => {
     const files = event.target.files;
     if (!files.length) return;
     let allRows = [], fileCount = 0, filesToParse = files.length;
-    for (let i = 0; i < files.length; i++) {
-      Papa.parse(files[i], {
-        header: true,
-        skipEmptyLines: true,
-        complete: function (results) {
-          allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
-          fileCount++;
-          if (fileCount === filesToParse) {
-            // --- Begin normalization logic ---
-            // 1. Analyze distribution
-            let positives = 0, negatives = 0;
-            for (const row of allRows) {
-              const amt = guessAmount(row);
-              if (amt > 0) positives++;
-              else if (amt < 0) negatives++;
-            }
-            // 2. Decide if sign flip is needed
-            const flipSign = positives > negatives;
-            // 3. Normalize all amounts in-place
-            for (const row of allRows) {
-              let amt = guessAmount(row);
-              if (flipSign) amt = -Math.abs(amt);
-              else amt = Math.abs(amt) * (amt < 0 ? -1 : 1); // keep negative as spend, positive as income
-              row._amount = amt;
-            }
-            // --- End normalization logic ---
-            originalRows = allRows;
-            processAndRender(originalRows);
-          }
-        }
-      });
+for (let i = 0; i < files.length; i++) {
+  Papa.parse(files[i], {
+    header: true,
+    skipEmptyLines: true,
+    complete: function(results) {
+      allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
+      fileCount++;
+      if (fileCount === filesToParse) {
+        originalRows = allRows;
+        processAndRender(originalRows);
+      }
     }
+  });
+}
   });
 
   document.getElementById('filters').addEventListener('change', renderEverything);
