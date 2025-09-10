@@ -14,14 +14,15 @@ function processAndRender(rows) {
   allCategories.clear();
   allPayees.clear();
   for (const row of rows) {
-    const amount = guessAmount(row);
+    // Use the normalized amount which is now always negative for spend, positive for income
+    const amount = row._amount;
     const date = getDate(row) || '';
     const desc = getDesc(row) || '';
     const category = categorize(desc);
     const key = [date, desc, amount].join('|');
     if (!seen.has(key)) {
       seen.add(key);
-      mergedRows.push({...row, _amount: amount, _date: date, _desc: desc, _category: category});
+      mergedRows.push({ ...row, _amount: amount, _date: date, _desc: desc, _category: category });
       if (category !== "Income") allCategories.add(category);
       if (desc) allPayees.add(desc);
     }
@@ -70,7 +71,7 @@ function renderEverything() {
     if (amt < 0) {
       categoryTotals[row._category] = (categoryTotals[row._category] || 0) + Math.abs(amt);
       let d = new Date(row._date);
-      let month = !isNaN(d.getTime()) ? `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}` : (row._date||'').substring(0,7);
+      let month = !isNaN(d.getTime()) ? `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}` : (row._date || '').substring(0, 7);
       monthlyTotals[month] = (monthlyTotals[month] || 0) + Math.abs(amt);
     }
   });
@@ -101,46 +102,46 @@ function renderEverything() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('csvFiles').addEventListener('change', function(event) {
+  document.getElementById('csvFiles').addEventListener('change', function (event) {
     const files = event.target.files;
     if (!files.length) return;
     let allRows = [], fileCount = 0, filesToParse = files.length;
-for (let i = 0; i < files.length; i++) {
-  Papa.parse(files[i], {
-    header: true,
-    skipEmptyLines: true,
-    complete: function(results) {
-      allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
-      fileCount++;
-      if (fileCount === filesToParse) {
-        // --- Begin new normalization logic ---
-        // 1. Analyze distribution
-        let positives = 0, negatives = 0;
-        for (const row of allRows) {
-          // Use your existing guessAmount function
-          const amt = guessAmount(row);
-          if (amt > 0) positives++;
-          else if (amt < 0) negatives++;
+    for (let i = 0; i < files.length; i++) {
+      Papa.parse(files[i], {
+        header: true,
+        skipEmptyLines: true,
+        complete: function (results) {
+          allRows = allRows.concat(results.data.filter(row => Object.values(row).join('').trim() !== ''));
+          fileCount++;
+          if (fileCount === filesToParse) {
+            // --- Begin normalization logic ---
+            // 1. Analyze distribution
+            let positives = 0, negatives = 0;
+            for (const row of allRows) {
+              const amt = guessAmount(row);
+              if (amt > 0) positives++;
+              else if (amt < 0) negatives++;
+            }
+            // 2. Decide if sign flip is needed
+            const flipSign = positives > negatives;
+            // 3. Normalize all amounts in-place
+            for (const row of allRows) {
+              let amt = guessAmount(row);
+              if (flipSign) amt = -Math.abs(amt);
+              else amt = Math.abs(amt) * (amt < 0 ? -1 : 1); // keep negative as spend, positive as income
+              row._amount = amt;
+            }
+            // --- End normalization logic ---
+            originalRows = allRows;
+            processAndRender(originalRows);
+          }
         }
-        // 2. Decide if sign flip is needed
-        const flipSign = positives > negatives;
-        // 3. Normalize all amounts in-place
-        for (const row of allRows) {
-          let amt = guessAmount(row);
-          if (flipSign) amt = -amt;
-          row._amount = amt; // Overwrite or use a new field if you want
-        }
-        // --- End new normalization logic ---
-        originalRows = allRows;
-        processAndRender(originalRows);
-      }
+      });
     }
-  });
-}
   });
 
   document.getElementById('filters').addEventListener('change', renderEverything);
-  document.getElementById('resetFilters').addEventListener('click', function() {
+  document.getElementById('resetFilters').addEventListener('click', function () {
     renderFilters(allCategories, allPayees);
     renderEverything();
   });
